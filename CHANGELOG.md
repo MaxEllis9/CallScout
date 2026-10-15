@@ -1,0 +1,18 @@
+# Changelog
+
+## 0.10.0
+
+- Pin the starting function while exploring other definitions; release it to follow the cursor.
+- Click call-path breadcrumbs to return to an ancestor and its tree occurrence.
+- Open the original call site from a tree row; refresh or collapse the tree from its toolbar.
+- Bound traversal settings at runtime, reject non-local Qt reads, and resolve theme symlinks before checking paths.
+- Treat unfinished comments and raw strings as extending to end of input, avoiding repeated scanner retries.
+- Use an explicit runtime file allowlist for both offline and official VS Code packaging.
+
+## 0.9.0
+
+- Add a source-ordered nested call tree with filenames, repeated calls and recursion markers.
+
+## 0.8.0
+
+- Rename to CallScout, add modifier-click definition navigation and initial static Qt signal/slot support.

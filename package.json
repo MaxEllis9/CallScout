@@ -1,0 +1,262 @@
+{
+  "name": "callscout",
+  "displayName": "CallScout",
+  "description": "Follow reachable C/C++ function definitions, dim unrelated code, and preview only the code on your call path.",
+  "version": "0.10.0",
+  "publisher": "local-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension/main.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "callScout.analyze",
+        "title": "CallScout: Highlight From Enclosing Function",
+        "category": "CallScout"
+      },
+      {
+        "command": "callScout.clear",
+        "title": "CallScout: Clear Highlights",
+        "category": "CallScout"
+      },
+      {
+        "command": "callScout.enableAuto",
+        "title": "CallScout: Enable Automatic Updates",
+        "category": "CallScout"
+      },
+      {
+        "command": "callScout.openLocation",
+        "title": "CallScout: Open Function"
+      },
+      {
+        "command": "callScout.previewFile",
+        "title": "CallScout: Preview Source"
+      },
+      {
+        "command": "callScout.toggleDependencies",
+        "title": "CallScout: Toggle All Dependencies",
+        "icon": "$(library)"
+      },
+      {
+        "command": "callScout.selectDependencies",
+        "title": "CallScout: Select Dependencies to Show",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "callScout.pinRoot",
+        "title": "CallScout: Pin Starting Function",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "callScout.unpinRoot",
+        "title": "CallScout: Follow Cursor",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "callScout.openCallSite",
+        "title": "CallScout: Open Call Site",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "callScout.refresh",
+        "title": "CallScout: Refresh Analysis",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "callScout.analyze",
+          "when": "editorLangId == cpp || editorLangId == c",
+          "group": "navigation@20"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "callScout.toggleDependencies",
+          "when": "view == callScout.files",
+          "group": "navigation"
+        },
+        {
+          "command": "callScout.selectDependencies",
+          "when": "view == callScout.files",
+          "group": "navigation"
+        },
+        {
+          "command": "callScout.pinRoot",
+          "when": "view == callScout.callTree && !callScout.pinned",
+          "group": "navigation@1"
+        },
+        {
+          "command": "callScout.unpinRoot",
+          "when": "view == callScout.callTree && callScout.pinned",
+          "group": "navigation@1"
+        },
+        {
+          "command": "callScout.refresh",
+          "when": "view == callScout.callTree",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "callScout.openCallSite",
+          "when": "view == callScout.callTree && viewItem == callOccurrence",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CallScout",
+      "properties": {
+        "callScout.maxDepth": {
+          "type": "integer",
+          "default": 8,
+          "minimum": 0,
+          "maximum": 30,
+          "description": "Maximum outgoing call hops from the starting function."
+        },
+        "callScout.maxFunctions": {
+          "type": "integer",
+          "default": 500,
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "Maximum functions to visit per analysis."
+        },
+        "callScout.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically update CallScout when the cursor moves to another enclosing function."
+        },
+        "callScout.debounceMs": {
+          "type": "integer",
+          "default": 120,
+          "minimum": 100,
+          "maximum": 3000,
+          "description": "Delay after cursor movement before recalculating (milliseconds)."
+        },
+        "callScout.dimOpacity": {
+          "type": "number",
+          "default": 0.65,
+          "minimum": 0.1,
+          "maximum": 0.95,
+          "description": "Opacity of code outside the discovered call tree (higher is more readable)."
+        },
+        "callScout.showDependencies": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include all dependency definitions in discovery and the sidebar. Disabled dependencies are not scanned."
+        },
+        "callScout.dependencyFolders": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [
+            "JUCE",
+            "Qt",
+            "third_party",
+            "third-party",
+            "3rdparty",
+            "vendor",
+            "external",
+            "extern",
+            "node_modules"
+          ],
+          "description": "Folder names treated as dependencies (case insensitive). Hidden dependency folders are not scanned."
+        },
+        "callScout.includedDependencyFolders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Dependency folder names to include even when all dependencies are hidden. Use the sidebar filter button to choose."
+        },
+        "callScout.qtSupport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Follow statically matched Qt signal/slot connections and list uncertain modern, legacy, lambda and automatic connections separately. Registrations are indexed lazily."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "callScout",
+          "title": "CallScout",
+          "icon": "resources/glasses.svg"
+        }
+      ]
+    },
+    "views": {
+      "callScout": [
+        {
+          "id": "callScout.files",
+          "name": "Reachable Source Files"
+        },
+        {
+          "id": "callScout.callTree",
+          "name": "Call Tree \u00b7 Source Order"
+        },
+        {
+          "id": "callScout.preview",
+          "name": "Source Preview",
+          "type": "webview"
+        },
+        {
+          "id": "callScout.qtPossible",
+          "name": "Possible Qt Connections"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "package": "python3 package.py"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Source analysis requires a trusted workspace and its language server."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Only local file workspaces are supported."
+    }
+  },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "extension/main.js",
+    "extension/graph.js",
+    "extension/call-tree.js",
+    "extension/calls.js",
+    "extension/files.js",
+    "extension/preview.js",
+    "extension/qt.js",
+    "extension/syntax.js",
+    "resources/glasses.svg",
+    "resources/preview.js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MaxEllis9/CallScout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MaxEllis9/CallScout/issues"
+  },
+  "homepage": "https://github.com/MaxEllis9/CallScout#readme"
+}
