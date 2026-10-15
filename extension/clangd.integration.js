@@ -6,7 +6,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const { pathToFileURL, fileURLToPath } = require('node:url');
 const { createCallResolver } = require(process.env.RESOLVER_PATH || './calls');
-const { walkOutgoing } = require('./graph');
+const { walkOutgoing } = require(process.env.GRAPH_PATH || './graph');
 const { createQtResolver } = require('./qt');
 class Position {
   constructor(line, character) { this.line = line; this.character = character; }
@@ -96,12 +96,30 @@ const vscode = { SymbolKind: { Function: 11, Method: 5, Constructor: 8 }, worksp
     const started = Date.now();
     let requests = 0;
     const execute = vscode.commands.executeCommand;
-    vscode.commands.executeCommand = (...args) => { requests++; return execute(...args); };
+    const metrics = new Map();
+    vscode.commands.executeCommand = async (...args) => {
+      requests++;
+      const begin = Date.now();
+      try { return await execute(...args); }
+      finally {
+        const row = metrics.get(args[0]) || { count: 0, milliseconds: 0 };
+        row.count++; row.milliseconds += Date.now() - begin;
+        metrics.set(args[0], row);
+      }
+    };
     const include = process.env.PROJECT_ONLY ? resource => resource.fsPath.startsWith(path.join(rootDir, 'source') + path.sep) : () => true;
     let qt;
-    const resolver = createCallResolver(vscode, () => true, s => logs.push(s), cache, include, info => qt ? qt.follow(info) : []);
+    const files = new Set([resource.toString()]);
+    let firstAdditionalFile;
+    const discovered = item => {
+      if (!files.has(item.uri.toString())) {
+        files.add(item.uri.toString());
+        firstAdditionalFile ??= Date.now() - started;
+      }
+    };
+    const resolver = createCallResolver(vscode, () => true, s => logs.push(s), cache, include, info => qt ? qt.follow(info) : [], (_caller, targets) => targets.forEach(discovered));
     if (process.env.QT) qt = createQtResolver(vscode, cache, () => true, s => logs.push(s), resolver, include);
-    const result = await walkOutgoing({ ...symbol, uri: resource }, resolver.outgoing, Number(process.env.DEPTH || 2), 100);
+    const result = await walkOutgoing({ ...symbol, uri: resource }, resolver.outgoing, Number(process.env.DEPTH || 2), 100, node => discovered(node.item));
     assert.equal(result.errors.length, 0, JSON.stringify(result.errors));
     if (!process.env.BASELINE) for (const node of result.nodes) {
       const doc = await openTextDocument(node.item.uri);
@@ -120,6 +138,10 @@ const vscode = { SymbolKind: { Function: 11, Method: 5, Constructor: 8 }, worksp
       assert.ok(result.nodes.some(node => node.item.name === 'leaf'), 'Slot callees were not traversed');
     }
     if (process.env.QT && !process.env.QT_EXPECT) assert.equal(cache.qtIndex, undefined, 'Non-Qt traversal must not build a Qt workspace index');
+    if (process.env.PROFILE) {
+      console.log(Object.fromEntries(metrics));
+      console.log(`First additional file: ${firstAdditionalFile} ms; ${files.size} files discovered.`);
+    }
     console.log(`Cold traversal: ${Date.now() - started} ms, ${requests} provider requests, ${result.nodes.length} definitions.`);
     if (process.env.BASELINE) return;
     requests = 0;

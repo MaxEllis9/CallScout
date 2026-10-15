@@ -34,7 +34,7 @@ function callOffsets(text) {
   return offsets;
 }
 
-function createCallResolver(vscode, isCurrent, log, cache = {}, include = () => true, onCall = async () => []) {
+function createCallResolver(vscode, isCurrent, log, cache = {}, include = () => true, onCall = async () => [], onDiscover = () => {}) {
   const kinds = new Set([vscode.SymbolKind.Function, vscode.SymbolKind.Method, vscode.SymbolKind.Constructor]);
   for (const key of ['documents', 'symbols', 'locations', 'definitions', 'outgoing']) cache[key] ||= new Map();
   async function document(uri) {
@@ -103,9 +103,12 @@ function createCallResolver(vscode, isCurrent, log, cache = {}, include = () => 
       if (text.length > 1024 * 1024) { log(`Skipped oversized function ${definition.name}.`); continue; }
       const offsets = callOffsets(text);
       if (offsets.length > 256) log(`Direct call scan limited to 256 sites in ${definition.name}.`);
-      // Four concurrent definition requests, rather than a serial round trip per call.
-      for (let i = 0; i < Math.min(offsets.length, 256) && isCurrent(); i += 4) {
-        const batch = await Promise.all(offsets.slice(i, Math.min(i + 4, 256)).map(async offset => {
+      // Keep four sites in flight; a slow site must not hold up the next batch.
+      let next = 0;
+      const count = Math.min(offsets.length, 256), resolvedCalls = new Array(count);
+      await Promise.all(Array.from({ length: Math.min(4, count) }, async () => {
+        while (next < count && isCurrent()) {
+          const index = next++, offset = offsets[index];
           const targets = [];
           const position = doc.positionAt(start + offset);
           const resolved = await locations(definition.uri, position);
@@ -116,11 +119,13 @@ function createCallResolver(vscode, isCurrent, log, cache = {}, include = () => 
             const target = await functionAt(uri, position);
             if (target) targets.push(...await resolve(target));
           }
+          if (isCurrent() && targets.length) onDiscover(definition, targets);
           const qtCalls = await onCall({ caller: definition, uri: definition.uri, position, locations: resolved, name: text.slice(offset).match(/^\w+/)?.[0] || '' });
-          return [...new Map([...targets.map(to => ({ to })), ...qtCalls].map(call => [itemKey(call.to), { ...call, fromUri: definition.uri, callSite: position }])).values()];
-        }));
-        calls.push(...batch.flat());
-      }
+          if (isCurrent() && qtCalls.length) onDiscover(definition, qtCalls.map(call => call.to));
+          resolvedCalls[index] = [...new Map([...targets.map(to => ({ to })), ...qtCalls].map(call => [itemKey(call.to), { ...call, fromUri: definition.uri, callSite: position }])).values()];
+        }
+      }));
+      calls.push(...resolvedCalls.flat());
     }
     if (isCurrent()) cache.outgoing.set(key, calls);
     return calls;

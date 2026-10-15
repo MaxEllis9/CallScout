@@ -295,18 +295,31 @@ async function analyze(options = {}) {
   const include = uri => visibleFile(uri, vscode.workspace.getWorkspaceFolder(uri), filter);
   let qt;
   const resolver = createCallResolver(vscode, () => run === generation, message => output.appendLine(message), callCache, include,
-    info => qt ? qt.follow(info) : []);
+    info => qt ? qt.follow(info) : [], (caller, targets) => {
+      if (run !== generation) return;
+      const depth = (visited.get(itemKey(caller))?.depth || 0) + 1;
+      const fileCount = ranges.size;
+      for (const item of targets) record(item, depth);
+      if (ranges.size !== fileCount || Date.now() - lastPublish >= 100) publish();
+    });
   if (config.get('qtSupport', true)) qt = createQtResolver(vscode, callCache, () => run === generation, message => output.appendLine(message), resolver, include);
   const possible = [];
   possibleQtProvider.update([]);
   const ranges = new Map();
-  const visited = [];
+  const visited = new Map();
+  const maxFunctions = Math.max(1, Math.min(10000, Math.floor(Number(config.get('maxFunctions', 500)) || 500)));
+  function record(item, depth, kind) {
+    const key = itemKey(item), previous = visited.get(key);
+    if (!previous && visited.size >= maxFunctions) return;
+    if (!previous || depth < previous.depth) visited.set(key, { item, depth, kind });
+    addRange(ranges, item.uri, item.range);
+  }
   const callsByCaller = new Map();
   let lastPublish = 0;
   function publish() {
     if (run !== generation) return;
     active = ranges;
-    fileProvider.update(visited);
+    fileProvider.update([...visited.values()]);
     callTreeProvider.update(root, callsByCaller, config.get('maxDepth', 8));
     decorateVisible();
     if (previewProvider.pending) {
@@ -320,12 +333,10 @@ async function analyze(options = {}) {
   const rootDefinitions = await resolver.resolve(root);
   if (rootDefinitions.length === 1) root = rootDefinitions[0];
   for (const definition of rootDefinitions) {
-    addRange(ranges, definition.uri, definition.range);
-    visited.push({ item: definition, depth: 0 });
+    record(definition, 0);
   }
   if (run !== generation) return;
   publish();
-  visited.length = 0;
   output.appendLine(`Scanning ${symbol.name}…`);
   const result = await walkOutgoing(root, async item => {
     if (run !== generation) return [];
@@ -339,8 +350,7 @@ async function analyze(options = {}) {
     if (run !== generation) return;
     for (const definition of await resolver.resolve(node.item)) {
       if (run !== generation) return;
-      visited.push({ ...node, item: definition });
-      addRange(ranges, definition.uri, definition.range);
+      record(definition, node.depth, node.kind);
     }
     if (Date.now() - lastPublish >= 100) publish();
   }, (caller, calls) => {
@@ -349,10 +359,16 @@ async function analyze(options = {}) {
     if (Date.now() - lastPublish >= 100) publish();
   });
   if (run !== generation) return;
+  // Reconcile provisional discoveries with the bounded completed traversal.
+  visited.clear(); ranges.clear();
+  for (const node of result.nodes) {
+    for (const definition of await resolver.resolve(node.item)) record(definition, node.depth, node.kind);
+  }
+  if (run !== generation) return;
   lastRoot = rootKey;
   publish();
-  output.appendLine(`\nFrom ${root.name} (${document.uri.fsPath}:${symbol.range.start.line + 1}), ${visited.length} definition(s), ${ranges.size} file(s), ${Date.now() - started} ms:`);
-  for (const node of visited) output.appendLine(`${'  '.repeat(node.depth)}${node.item.name} — ${node.item.uri.fsPath}:${node.item.range.start.line + 1}`);
+  output.appendLine(`\nFrom ${root.name} (${document.uri.fsPath}:${symbol.range.start.line + 1}), ${visited.size} definition(s), ${ranges.size} file(s), ${Date.now() - started} ms:`);
+  for (const node of visited.values()) output.appendLine(`${'  '.repeat(node.depth)}${node.item.name} — ${node.item.uri.fsPath}:${node.item.range.start.line + 1}`);
   for (const error of result.errors) output.appendLine(`UNRESOLVED ${error.key}: ${error.message}`);
   if (result.truncated) output.appendLine('Traversal truncated by maxFunctions.');
   if (options.showOutput) output.show(true);

@@ -61,3 +61,68 @@ test('concurrent lookups keep source order and repeated calls, and reuse the sca
   assert.equal(await resolver.outgoing(root), calls);
   assert.equal(requests, 3);
 });
+test('publishes resolved bodies before slow sibling calls finish', async () => {
+  const { createCallResolver } = require('./calls');
+  const uri = { scheme: 'file', authority: '', fsPath: '/project/test.cpp', toString: () => 'file:///project/test.cpp' };
+  const source = 'void root() { work(); work(); work(); work(); }';
+  const roots = Array.from({ length: 1 }, (_, line) => ({ name: 'root' + line, uri,
+    selectionRange: { start: { line, character: 5 }, end: { line, character: 9 } },
+    range: { start: { line, character: 0 }, end: { line, character: source.length } } }));
+  const body = { ...roots[0], name: 'work', selectionRange: { start: { line: 10, character: 5 } } };
+  let active = 0, peak = 0, finished = 0, firstDiscovery;
+  let unblock;
+  const slow = new Promise(resolve => { unblock = resolve; });
+  const vscode = {
+    SymbolKind: { Function: 1, Method: 2, Constructor: 3 },
+    workspace: { openTextDocument: async () => ({ getText: () => source,
+      offsetAt: position => position.character, positionAt: character => ({ line: 0, character }) }) },
+    commands: { executeCommand: async (_command, _uri, position) => {
+      active++; peak = Math.max(peak, active);
+      if (position.character === source.lastIndexOf('work')) await slow;
+      else await new Promise(resolve => setImmediate(resolve));
+      active--; finished++;
+      return [{ uri, range: { start: { line: 10, character: 5 } } }];
+    } }
+  };
+  // Resolve calls to a cached target body in a different file.
+  roots.forEach((root, i) => { root.uri = { ...uri, toString: () => 'file:///project/' + i + '.cpp' }; });
+  const cache = { symbols: new Map([[uri.toString(), Promise.resolve([{ ...body, kind: 1,
+    selectionRange: { start: { line: 10, character: 5 }, contains: () => true } }])]]) };
+  const resolver = createCallResolver(vscode, () => true, () => {}, cache, () => true, async () => [], (_caller, targets) => {
+    assert.equal(targets[0].name, 'work');
+    firstDiscovery ??= finished;
+    unblock();
+  });
+  const scans = await Promise.all(roots.map(root => resolver.outgoing(root)));
+  assert.equal(peak, 4);
+  assert.ok(firstDiscovery < finished);
+  assert.equal(finished, 4);
+  assert.deepEqual(scans.map(calls => calls.length), [4]);
+});
+test('a slow call does not block later sites, while lookup concurrency and source order stay bounded', async () => {
+  const { createCallResolver } = require('./calls');
+  const uri = { scheme: 'file', authority: '', fsPath: '/project/root.cpp', toString: () => 'file:///project/root.cpp' };
+  const source = 'void entry() { slow(); two(); three(); four(); five(); }';
+  const root = { uri, name: 'entry', selectionRange: { start: { line: 0, character: 5 }, end: { line: 0, character: 10 } },
+    range: { start: { line: 0, character: 0 }, end: { line: 0, character: source.length } } };
+  let finishSlow, active = 0, peak = 0;
+  const slow = new Promise(resolve => { finishSlow = resolve; });
+  const vscode = {
+    SymbolKind: { Function: 1, Method: 2, Constructor: 3 },
+    workspace: { openTextDocument: async () => ({ getText: () => source,
+      offsetAt: p => p.character, positionAt: character => ({ line: 0, character }) }) },
+    commands: { executeCommand: async (_command, _uri, position) => {
+      active++; peak = Math.max(peak, active);
+      if (position.character === source.indexOf('slow')) await slow;
+      else await new Promise(resolve => setImmediate(resolve));
+      if (position.character === source.indexOf('five')) finishSlow();
+      active--;
+      return [];
+    } }
+  };
+  const resolver = createCallResolver(vscode, () => true, () => {}, {}, () => true,
+    async ({ name }) => [{ to: { uri, name, selectionRange: { start: { line: 1, character: 0 } } } }]);
+  const calls = await resolver.outgoing(root);
+  assert.equal(peak, 4);
+  assert.deepEqual(calls.map(call => call.to.name), ['slow', 'two', 'three', 'four', 'five']);
+});

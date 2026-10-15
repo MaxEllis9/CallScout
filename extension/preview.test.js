@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const fs = require('node:fs');
 function setup(trusted = true) {
   const commands = new Map();
+  const providers = new Map();
   const documents = new Map();
   let preview;
   let receive;
@@ -36,7 +37,7 @@ function setup(trusted = true) {
       createTextEditorDecorationType: disposable,
       showInformationMessage: () => {},
       createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
-      registerTreeDataProvider: disposable,
+      registerTreeDataProvider: (id, provider) => { providers.set(id, provider); return disposable(); },
       createTreeView: (_id, options) => { tree = options.treeDataProvider; return { dispose() {}, reveal: async (element, options) => { revealed.push({ element, options }); } }; },
       registerWebviewViewProvider: (id, provider) => { preview = provider; return disposable(); },
       onDidChangeTextEditorSelection: handler => { events.selection = handler; return disposable(); }, onDidChangeActiveTextEditor: handler => { events.editor = handler; return disposable(); },
@@ -54,7 +55,7 @@ function setup(trusted = true) {
   const view = { webview: { onDidReceiveMessage: handler => { receive = handler; return disposable(); } }, onDidDispose() {} };
   preview?.resolveWebviewView(view);
   const resource = name => ({ scheme: 'file', authority: '', fsPath: name, path: name, toString: () => name });
-  return { preview, documents, view, resource, commands, events, tree, revealed, pinned: context.module.exports.pinned, timer: context.module.exports.timer, enable: context.module.exports.enable, analyze: context.module.exports.analyze, setRanges: context.module.exports.setRanges, vscode, opened, migrateSettings: context.module.exports.migrateSettings, receive: message => receive(message) };
+  return { preview, documents, view, resource, commands, providers, events, tree, revealed, pinned: context.module.exports.pinned, timer: context.module.exports.timer, enable: context.module.exports.enable, analyze: context.module.exports.analyze, setRanges: context.module.exports.setRanges, vscode, opened, migrateSettings: context.module.exports.migrateSettings, receive: message => receive(message) };
 }
 test('previews the entire selected function and excludes neighbouring code', async () => {
   const { preview, documents, view, resource, setRanges } = setup();
@@ -277,4 +278,41 @@ test('restricted workspaces register no analysis commands or views', () => {
   assert.equal(f.tree, undefined);
   assert.equal(f.preview, undefined);
   assert.equal(f.documents.size, 0);
+});
+test('source list shows a resolved file while another call in the root is still pending', async () => {
+  const f = setup(), rootUri = f.resource('/project/root.cpp'), targetUri = f.resource('/project/fast.cpp');
+  const source = 'void entry() { fast(); slow(); }';
+  const doc = (uri, text) => ({ uri, languageId: 'cpp', getText: () => text,
+    offsetAt: p => p.character, positionAt: character => ({ line: 0, character }) });
+  f.documents.set(rootUri.toString(), doc(rootUri, source));
+  f.documents.set(targetUri.toString(), doc(targetUri, 'void fast() {}'));
+  const symbol = (name, length) => ({ name, kind: f.vscode.SymbolKind.Function,
+    range: new f.vscode.Range({ line: 0, character: 0 }, { line: 0, character: length }),
+    selectionRange: new f.vscode.Range({ line: 0, character: 5 }, { line: 0, character: 5 + name.length }) });
+  f.vscode.window.activeTextEditor = { document: f.documents.get(rootUri.toString()), selection: { active: { line: 0, character: 6 } } };
+  let releaseSlow, sawFile;
+  const slow = new Promise(resolve => { releaseSlow = resolve; });
+  const visible = new Promise(resolve => { sawFile = resolve; });
+  const files = f.providers.get('callScout.files'), update = files.update.bind(files);
+  files.update = nodes => {
+    update(nodes);
+    if (files.files.some(file => file.uri.toString() === targetUri.toString())) sawFile();
+  };
+  f.vscode.commands.executeCommand = async (command, uri, position) => {
+    if (command === 'vscode.executeDocumentSymbolProvider') return [uri === rootUri ? symbol('entry', source.length) : symbol('fast', 14)];
+    if (command === 'vscode.executeDefinitionProvider') {
+      if (position.character === source.indexOf('slow')) { await slow; return []; }
+      return [{ uri: targetUri, range: { start: { line: 0, character: 5 } } }];
+    }
+    return [];
+  };
+  let complete = false;
+  const scan = f.analyze({ force: true }).then(() => { complete = true; });
+  await visible;
+  assert.equal(complete, false);
+  assert.equal(files.files.length, 2);
+  releaseSlow();
+  await scan;
+  assert.equal(files.files.length, 2);
+  assert.equal(files.allFiles.find(file => file.uri === targetUri).functions.length, 1);
 });

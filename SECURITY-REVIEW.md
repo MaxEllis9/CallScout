@@ -44,3 +44,9 @@ For release/IT approval steps and official sources, see RELEASE.md. Exact versio
 ## Repository import
 
 The GitHub import adds repository/issue/homepage metadata and a build-from-source README. Runtime source is unchanged from the reviewed local 0.10.0 package. The original local package validation used a missing-repository metadata exception; validate new repository builds without that exception. Original VSIX hashes/components are not represented as repository build hashes. No release tag or Marketplace publication is implied by this import.
+
+## 0.10.2 performance update
+
+Reviewed the diff to calls.js and main.js: confirmed bodies can update the source list before their caller scan finishes, and a sliding pool keeps at most four call sites active. Results retain source order and repeated calls; completion reconciles provisional entries with traversal limits. No new filesystem, network, process, webview-message or dependency capability was added.
+
+All 53 unit/regression tests passed. Member-call and Qt-stub clangd fixtures passed. A sequential before/after FlowerPower comparison returned identical function identities/depths and the same 32 definitions, 12 files and 303 provider queries. One comparison measured 8,793 ms before and 6,300 ms after; other trials varied, so this is not a guaranteed speedup. Warm traversal made zero provider requests. The first additional-file discovery was similar in that project (750/793 ms); the sidebar regression separately verifies that slow calls no longer hold back already-resolved files. Windows/live-UI and Marketplace limitations above remain.

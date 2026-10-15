@@ -1,12 +1,12 @@
 # CallScout
 
-A VS Code extension for exploring reachable C/C++ code. Current source version: **0.10.1**.
+A VS Code extension for exploring reachable C/C++ code. Current source version: **0.10.2**.
 
 Follow C/C++ calls from the function under your cursor. CallScout keeps discovered function bodies bright, dims other code, and previews only reachable definitions in a selected file.
 
 ## Download the built extension
 
-The easiest installation method is to download **`callscout-0.10.1.vsix`** from the [latest GitHub release](https://github.com/MaxEllis9/CallScout/releases/latest). Under **Assets**, choose the `.vsix` file, rather than GitHub's **Source code** ZIP/TAR downloads. The release also includes `SHA256SUMS.txt` for checking the download's integrity.
+The easiest installation method is to download **`callscout-0.10.2.vsix`** from the [latest GitHub release](https://github.com/MaxEllis9/CallScout/releases/latest). Under **Assets**, choose the `.vsix` file, rather than GitHub's **Source code** ZIP/TAR downloads. The release also includes `SHA256SUMS.txt` for checking the download's integrity.
 
 In VS Code, open the Command Palette (**Ctrl+Shift+P** on Windows / **Cmd+Shift+P** on macOS), run **Extensions: Install from VSIX...**, choose the downloaded file, then run **Developer: Reload Window**. You do not need Node.js, npm, Git or any build tools on that computer. You still need an approved C/C++ language provider such as clangd for symbol analysis.
 
@@ -64,7 +64,7 @@ node tools/node_modules/@vscode/vsce/vsce package --no-dependencies
 On success, the terminal prints **Packaged**, followed by the output path. The file appears in the top-level repository folder:
 
 ```text
-callscout-0.10.1.vsix
+callscout-0.10.2.vsix
 ```
 
 The filename uses the version in `package.json`, so it will change when the extension version changes. The package has no platform-specific native binaries and is intended for both Windows and macOS; a live Windows smoke test remains outstanding.
@@ -93,7 +93,7 @@ On a managed work computer, get IT approval for the exact extension version and 
 
 ## Install and upgrade
 
-Install/configure clangd with your project's `compile_commands.json`. Install `callscout-0.10.1.vsix` using **Extensions: Install from VSIX...**, then reload the VS Code window. Requires VS Code 1.85 or newer. The universal package has no native binaries or third-party runtime packages; Windows still needs a live smoke test.
+Install/configure clangd with your project's `compile_commands.json`. Install `callscout-0.10.2.vsix` using **Extensions: Install from VSIX...**, then reload the VS Code window. Requires VS Code 1.85 or newer. The universal package has no native binaries or third-party runtime packages; Windows still needs a live smoke test.
 
 This release replaces the old C++ Reachability Lens extension with **local-dev.callscout**. Remove the old installation to avoid running two scanners. The commands, settings, views, output channel and package now use CallScout naming. Existing configured settings are copied to `callScout.*` at their original user/workspace/folder scope, preserving any explicit new settings, then the legacy values are removed.
 
@@ -119,7 +119,7 @@ The preview uses the installed theme's token colours and editor font settings. I
 
 The library toolbar button toggles all dependencies. The filter button selects specific folders such as JUCE or Qt. Hidden dependencies are not traversed. Enable one when you need its paths.
 
-Definition requests run in batches of four. Unchanged documents, symbols and call results are reused across root changes; edits, file changes and manual refresh invalidate results. Cursor debounce defaults to 120 ms. Cold language-server parsing can still take time; results appear progressively.
+Up to four call sites resolve concurrently. A finished lookup immediately frees its slot for the next call, so a slow lookup does not block an entire batch. Confirmed definitions enter the file list as soon as they resolve, before the caller finishes scanning. Unchanged documents, symbols and call results are reused across root changes; edits, file changes and manual refresh invalidate results. Cursor debounce defaults to 120 ms. Cold language-server parsing can still take time; results appear progressively.
 
 Commands are available under **CallScout** in the Command Palette. Settings use `callScout.*`: `autoUpdate` (true), `debounceMs` (120), `maxDepth` (8), `maxFunctions` (500), `dimOpacity` (0.65), `dependencyFolders`, `includedDependencyFolders`, `showDependencies` (false), and `qtSupport` (true).
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.2
+
+- Populate source files as each function body resolves, without waiting for every call in its caller.
+- Keep four call sites in flight instead of waiting for fixed batches; preserve source order and repeated calls.
+- Retain the existing traversal limits and reconcile partial results at completion.
+
 ## 0.10.1
 
 - Provide a prebuilt VSIX through GitHub Releases, with a SHA-256 checksum.
