@@ -2,7 +2,7 @@
   "name": "callscout",
   "displayName": "CallScout",
   "description": "Follow reachable C/C++ function definitions, dim unrelated code, and preview only the code on your call path.",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "publisher": "local-dev",
   "license": "MIT",
   "engines": {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+- Provide a prebuilt VSIX through GitHub Releases, with a SHA-256 checksum.
+- Expand Windows/macOS source-build, installation and troubleshooting instructions.
+- Add repository metadata; runtime code is unchanged from 0.10.0.
+
 ## 0.10.0
 
 - Pin the starting function while exploring other definitions; release it to follow the cursor.

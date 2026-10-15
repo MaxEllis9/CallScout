@@ -50,3 +50,7 @@ Microsoft applies server-side malware, runtime-behaviour and secret checks, and 
 NIST's Secure Software Development Framework is useful guidance for protecting source/builds, reviewing code, verifying releases and responding to vulnerabilities. It is not a VS Code extension acceptance test or a certification achieved by this local review. [NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final)
 
 The outstanding release gates are a real Marketplace publisher, repository access/release controls, Windows and live UI validation, organization-approved scanning/review, and actual Marketplace acceptance if that distribution route is chosen.
+
+## First GitHub release: 0.10.1
+
+Version 0.10.1 packages the repository metadata and expanded installation/build documentation. Runtime JavaScript and resources are unchanged from the reviewed 0.10.0 local release. The GitHub release provides the VSIX and SHA-256 checksum; GitHub-generated source archives are available from the same tag. This distribution is not a Marketplace signature or employer approval.

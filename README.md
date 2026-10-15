@@ -1,26 +1,99 @@
 # CallScout
 
-A VS Code extension for exploring reachable C/C++ code. Current source version: **0.10.0**.
+A VS Code extension for exploring reachable C/C++ code. Current source version: **0.10.1**.
 
 Follow C/C++ calls from the function under your cursor. CallScout keeps discovered function bodies bright, dims other code, and previews only reachable definitions in a selected file.
 
-## Build from source
+## Download the built extension
 
-Runtime has no third-party npm dependencies. Use Node.js 22 or newer for the pinned packaging tool:
+The easiest installation method is to download **`callscout-0.10.1.vsix`** from the [latest GitHub release](https://github.com/MaxEllis9/CallScout/releases/latest). Under **Assets**, choose the `.vsix` file, rather than GitHub's **Source code** ZIP/TAR downloads. The release also includes `SHA256SUMS.txt` for checking the download's integrity.
+
+In VS Code, open the Command Palette (**Ctrl+Shift+P** on Windows / **Cmd+Shift+P** on macOS), run **Extensions: Install from VSIX...**, choose the downloaded file, then run **Developer: Reload Window**. You do not need Node.js, npm, Git or any build tools on that computer. You still need an approved C/C++ language provider such as clangd for symbol analysis.
+
+If this repository is private, sign in to GitHub with an account that has access. On a work computer, follow your IT team's approved download and installation process. The GitHub release is a locally built, unsigned VSIX; it has not been published or signed by the Visual Studio Marketplace.
+
+## Build a VSIX from source
+
+A `.vsix` is the installable VS Code extension package. You can build it on your personal computer and transfer just that file to another computer through an approved channel. The computer where you install CallScout does not need Node.js, npm, Git or the packaging tools.
+
+### 1. Install the build requirements
+
+On the computer that will build the package, install:
+
+- **Node.js 22 or newer**, preferably a supported LTS release, from [nodejs.org](https://nodejs.org/). npm is included with Node.js.
+- **Git**, if you want to clone the repository. Alternatively, download the source ZIP as described below.
+
+No C++ compiler, Qt or JUCE installation is needed to package the extension. Internet access is needed to download the source and install the packaging tool. CallScout itself has no third-party npm runtime dependencies.
+
+Open **PowerShell on Windows** or **Terminal on macOS** and check:
+
+```sh
+node --version
+npm --version
+```
+
+The Node.js version should be `v22.x.x` or newer. Reopen your terminal after installing Node.js if either command is not found.
+
+### 2. Download the source
+
+Using Git, run:
 
 ```sh
 git clone https://github.com/MaxEllis9/CallScout.git
 cd CallScout
+```
+
+Alternatively, open the [repository](https://github.com/MaxEllis9/CallScout), choose **Code → Download ZIP**, extract it, and open a terminal in the extracted `CallScout-main` folder. For a private repository, sign in with an account that has access; Git cloning also requires GitHub authentication.
+
+For every command below, use the repository's **top-level folder**: it contains `package.json`, `README.md`, `extension` and `tools`. Do not run the commands from inside `extension` or `tools`.
+
+### 3. Test and build
+
+The following commands work in Windows PowerShell and macOS Terminal:
+
+```sh
 npm test
 npm ci --prefix tools --ignore-scripts --no-fund
 node tools/node_modules/@vscode/vsce/vsce package --no-dependencies
 ```
 
-Install the resulting VSIX with **Extensions: Install from VSIX...** and reload VS Code. No release is currently published on the Marketplace. On managed devices, obtain IT approval for the exact package first. See [security and privacy](SECURITY.md), [local review](SECURITY-REVIEW.md) and [release process](RELEASE.md).
+- `npm test` runs the automated tests. Fix any failures before distributing a build.
+- `npm ci` installs the exact packaging-tool dependencies recorded in `tools/package-lock.json`, into `tools/node_modules`. `--ignore-scripts` disables dependency installation scripts.
+- The final command uses Microsoft's VS Code extension packager to create the VSIX. It packages the explicit runtime file allowlist, excluding tests and build tools. You do not need a Marketplace publisher account, global `vsce` installation, or publishing token to build locally.
+
+On success, the terminal prints **Packaged**, followed by the output path. The file appears in the top-level repository folder:
+
+```text
+callscout-0.10.1.vsix
+```
+
+The filename uses the version in `package.json`, so it will change when the extension version changes. The package has no platform-specific native binaries and is intended for both Windows and macOS; a live Windows smoke test remains outstanding.
+
+**Windows PowerShell tip:** if PowerShell reports that `npm.ps1` cannot run because scripts are disabled, use `npm.cmd test` and `npm.cmd ci --prefix tools --ignore-scripts --no-fund` instead. The final `node` command stays the same. You do not need to change PowerShell's execution policy.
+
+### 4. Install the VSIX
+
+On the computer where you want to use CallScout:
+
+1. Open VS Code 1.85 or newer.
+2. Open the Command Palette with **Ctrl+Shift+P** on Windows or **Cmd+Shift+P** on macOS.
+3. Run **Extensions: Install from VSIX...** and select the generated `.vsix` file.
+4. Run **Developer: Reload Window** to activate the installation or update.
+5. Install/configure an approved C/C++ language provider such as clangd, and open a trusted C/C++ project. For clangd, provide the project's `compile_commands.json` so definitions can resolve correctly.
+
+On a managed work computer, get IT approval for the exact extension version and installation method first. A public GitHub repository or successful local build does not grant workplace approval. No release is currently published on the Marketplace. See [security and privacy](SECURITY.md), [local review](SECURITY-REVIEW.md) and [release process](RELEASE.md).
+
+### Common build problems
+
+- **`package.json` not found:** change into the top-level source folder before running the commands.
+- **Cannot find the `vsce` module:** complete the `npm ci --prefix tools --ignore-scripts --no-fund` step, then retry packaging from the top-level folder.
+- **Dependency download fails:** check your network/proxy configuration or use your organisation's approved npm registry. Keep the lockfile and security checks intact.
+- **GitHub reports “Repository not found”:** if the repository is private, check that you are signed in with an account that has access. Downloading a ZIP through the signed-in browser is an alternative to configuring Git authentication.
+- **Installed update is not visible:** reload the VS Code window and check the installed CallScout version in the Extensions view.
 
 ## Install and upgrade
 
-Install/configure clangd with your project's `compile_commands.json`. Install `callscout-0.10.0.vsix` using **Extensions: Install from VSIX...**, then reload the VS Code window. Requires VS Code 1.85 or newer. The universal package has no native binaries or third-party runtime packages; Windows still needs a live smoke test.
+Install/configure clangd with your project's `compile_commands.json`. Install `callscout-0.10.1.vsix` using **Extensions: Install from VSIX...**, then reload the VS Code window. Requires VS Code 1.85 or newer. The universal package has no native binaries or third-party runtime packages; Windows still needs a live smoke test.
 
 This release replaces the old C++ Reachability Lens extension with **local-dev.callscout**. Remove the old installation to avoid running two scanners. The commands, settings, views, output channel and package now use CallScout naming. Existing configured settings are copied to `callScout.*` at their original user/workspace/folder scope, preserving any explicit new settings, then the legacy values are removed.
 
